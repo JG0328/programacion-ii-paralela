@@ -1,0 +1,5 @@
+# depslib dependency file v1.0
+1539357627 source:c:\users\jggon\documents\programacion-ii-paralela\sendreceiver\main.cpp
+	<iostream>
+	<mpi.h>
+
