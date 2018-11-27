@@ -1,0 +1,8 @@
+# depslib dependency file v1.0
+1543280247 source:c:\users\jggon\documents\programacion-ii-paralela\mergesort\mssec\main.cpp
+	<vector>
+	<stdlib.h>
+	<stdio.h>
+	<ctime>
+	<iostream>
+

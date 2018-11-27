@@ -1,74 +1,109 @@
+#include <algorithm>
+#include <vector>
+#include "mpi.h"
 #include <iostream>
-#include
+#include <ctime>
+
+#define TAM 100000
 
 using namespace std;
 
-int main(int argc, char** argv) {
-    int numProcs, id, globalArraySize, localArraySize, height;
-    int *localArray, *globalArray;
-    double startTime, localTime, totalTime;
-    double zeroStartTime, zeroTotalTime, processStartTime, processTotalTime;;
-    int length = -1;
-    char myHostName[MPI_MAX_PROCESSOR_NAME];
+int main(int argc, char *argv[])
+{
+    int rank, size, tama;
+    vector<int> Global;//Vector a ordenar
+    vector<int> *Local;//parte del vector
 
-    MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
-    MPI_Comm_rank(MPI_COMM_WORLD, &id);
+    MPI_Init(&argc, &argv);//iniciamos el entorno MPI
+    MPI_Comm_rank(MPI_COMM_WORLD,&rank);//obtenemos el identificador del proceso
+    MPI_Comm_size(MPI_COMM_WORLD,&size);//obtenemos el numero de procesos
 
-    MPI_Get_processor_name (myHostName, &length);
+    if( size % 2 != 0 ) //El numero de procesos deberia debe ser par para aplicar este
+    {
+        cout<<"El numero de procesos debe ser par"<<endl;
+        MPI_Abort(MPI_COMM_WORLD,1);//abandonamos la ejecucion.
+    }
 
-    // check for odd processes
-    powerOfTwo(id, numProcs);
+    tama = TAM;
 
-    // get size of global array
-    getInput(argc, argv, id, numProcs, &globalArraySize);
+    if(rank == 0) //el proceso 0 genera un vector desordenado.
+    {
+        for(int i = 0; i < tama; ++i)
+        {
+            Global.push_back((rand()%tama));
+        }
+    }
+    Local = new vector<int>(tama/size);// reservamos espacio para el vector local a cada
 
-    // calculate total height of tree
-    height = log2(numProcs);
+    //Repartimos el vector entre todos los procesos.
 
-    // if process 0, allocate memory for global array and fill with values
-    if (id==0){
-		globalArray = (int*) malloc (globalArraySize * sizeof(int));
-		fillArray(globalArray, globalArraySize, id);
-		//printList(id, "UNSORTED ARRAY", globalArray, globalArraySize);  // Line A
-	}
+    long start_a = clock();
 
-    // allocate memory for local array, scatter to fill with values and print
-    localArraySize = globalArraySize / numProcs;
-    localArray = (int*) malloc (localArraySize * sizeof(int));
-    MPI_Scatter(globalArray, localArraySize, MPI_INT, localArray,
-		localArraySize, MPI_INT, 0, MPI_COMM_WORLD);
-    //printList(id, "localArray", localArray, localArraySize);   // Line B
+    if(rank == 0)
+    {
+        cout << "Empezo..." << endl;
+    }
 
-    //Start timing
-    startTime = MPI_Wtime();
-    //Merge sort
-    if (id == 0) {
-		zeroStartTime = MPI_Wtime();
-		globalArray = mergeSort(height, id, localArray, localArraySize, MPI_COMM_WORLD, globalArray);
-		zeroTotalTime = MPI_Wtime() - zeroStartTime;
-		printf("Process #%d of %d on %s took %f seconds \n",
-			id, numProcs, myHostName, zeroTotalTime);
-	}
-	else {
-		processStartTime = MPI_Wtime();
-	        mergeSort(height, id, localArray, localArraySize, MPI_COMM_WORLD, NULL);
-		processTotalTime = MPI_Wtime() - processStartTime;
-		printf("Process #%d of %d on %s took %f seconds \n",
-			id, numProcs, myHostName, processTotalTime);
-	}
-    //End timing
-    localTime = MPI_Wtime() - startTime;
-    MPI_Reduce(&localTime, &totalTime, 1, MPI_DOUBLE,
-        MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Scatter(&Global[0],tama/size,MPI_INT,&((*Local)[0]),tama/size,MPI_INT,0,MPI_COMM_WORLD);
 
-    if (id == 0) {
-		//printList(0, "FINAL SORTED ARRAY", globalArray, globalArraySize);  // Line C
-		printf("Sorting %d integers took %f seconds \n", globalArraySize,totalTime);
-		free(globalArray);
-	}
+    //Cada proceso ordena su parte.
+    sort(Local->begin(),Local->end());
 
-    free(localArray);
+    vector<int> *ordenado;
+    MPI_Status status;
+    int paso = 1;
+
+    //Ahora comienza el proceso de mezcla.
+    while(paso<size)
+    {
+        // Cada pareja de procesos
+        if(rank%(2*paso)==0) // El izquierdo recibe el vector y mezcla
+        {
+            if(rank+paso<size)// los procesos sin pareja esperan.
+            {
+                vector<int> localVecino(Local->size());
+                ordenado = new vector<int>(Local->size()*2);
+
+
+                MPI_Recv(&localVecino[0],localVecino.size(),MPI_INT,rank+paso,0,MPI_COMM_WORLD,&status);
+                merge(
+                    Local->begin(),Local->end(),localVecino.begin(),localVecino.end(),ordenado->begin() );
+
+                delete Local;
+                Local = ordenado;
+                ordenado = NULL;
+            }
+        }
+        else // El derecho envia su vector ordenado y termina
+        {
+            int vecino = rank-paso;
+            MPI_Send(&((*Local)[0]),Local->size(),MPI_INT,vecino,0,MPI_COMM_WORLD);
+            break;//Sale del bucle
+        }
+        paso = paso*2;// el paso se duplica ya que el numero de procesos se reduce a la
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    if(rank == 0)
+    {
+        long stop_a = clock();
+        cout << "Para " << TAM << " elementos, tiempo: " << (stop_a - start_a)/double(CLOCKS_PER_SEC) << " s" << endl;
+    }
+
+    /*
+
+    if(rank == 0)
+    {
+        cout<<endl<<"[";
+        for(unsigned int i = 0; i<Local->size(); ++i)
+        {
+            cout<< (*Local)[i]<<" , ";
+        }
+        cout<<"]"<<endl;
+    }
+    */
+
     MPI_Finalize();
     return 0;
 }
