@@ -1,0 +1,7 @@
+# depslib dependency file v1.0
+1544151328 source:c:\users\jggon\documents\programacion-ii-paralela\final3\main.cpp
+	"mpi.h"
+	<vector>
+	<cstdlib>
+	<iostream>
+
