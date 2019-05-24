@@ -1,0 +1,6 @@
+# depslib dependency file v1.0
+1542206526 source:c:\users\jggon\desktop\programacion ii paralela\matrizvector\main.cpp
+	<iostream>
+	<cstdlib>
+	<ctime>
+
